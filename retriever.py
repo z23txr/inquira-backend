@@ -17,6 +17,7 @@ logger = logging.getLogger("inquira_rag")
 # --------------------------------------------------------------------------
 _embeddings = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL)
 _pc = Pinecone(api_key=config.PINECONE_API_KEY)
+_compressor = FlashrankRerank(model="ms-marco-TinyBERT-L-2-v2", top_n=5)
 
 _index_ready = False
 
@@ -91,10 +92,9 @@ def get_hybrid_retriever(chunks, video_id: str):
         weights=[0.4, 0.6],
     )
 
-    # Reranking (FlashRank)
-    compressor = FlashrankRerank(top_n=5)
+    # Reranking (FlashRank) using lightweight global instance
     retriever = ContextualCompressionRetriever(
-        base_compressor=compressor,
+        base_compressor=_compressor,
         base_retriever=hybrid_retriever,
     )
 
