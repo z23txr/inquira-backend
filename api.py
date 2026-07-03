@@ -4,6 +4,7 @@ import logging
 import jwt
 import bcrypt
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,11 +81,13 @@ app.add_middleware(
 client = MongoClient(MONGODB_ATLAS_URI, serverSelectionTimeoutMS=5000)
 db = client[MONGODB_DB_NAME]
 users_collection = db["users"]
+history_collection = db["user_history"]
 
 # Enforce uniqueness at the database level too (not just an app-level check).
 # This closes the race condition where two simultaneous /auth/register
 # requests for the same email could both pass the find_one() check.
 users_collection.create_index("email", unique=True)
+history_collection.create_index([("user_id", 1), ("videoId", 1)], unique=True)
 
 
 # --------------------------------------------------------------------------
@@ -139,6 +142,13 @@ class AskReq(BaseModel):
     question: str
     video_id: str             # now required — ties the question to a specific loaded video
     session_id: str = "default_session"
+
+
+class SaveHistoryReq(BaseModel):
+    videoId: str
+    title: str
+    date: str
+    chat: list[dict[str, Any]]
 
 
 # --------------------------------------------------------------------------
@@ -353,6 +363,51 @@ def ask_question(req: AskReq, request: Request, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Something went wrong while generating the answer. Please try again.")
 
     return {"answer": answer}
+
+
+# --------------------------------------------------------------------------
+# User Chat History endpoints (stored per user in MongoDB)
+# --------------------------------------------------------------------------
+@app.get("/history")
+@limiter.limit("30/minute")
+def get_user_history(request: Request, user=Depends(get_current_user)):
+    docs = history_collection.find({"user_id": user["_id"]}).sort("updated_at", -1)
+    history = []
+    for doc in docs:
+        history.append({
+            "videoId": doc.get("videoId", ""),
+            "title": doc.get("title", doc.get("videoId", "")),
+            "date": doc.get("date", ""),
+            "chat": doc.get("chat", []),
+        })
+    return history
+
+
+@app.post("/history")
+@limiter.limit("30/minute")
+def save_user_history(req: SaveHistoryReq, request: Request, user=Depends(get_current_user)):
+    history_collection.update_one(
+        {"user_id": user["_id"], "videoId": req.videoId},
+        {
+            "$set": {
+                "user_id": user["_id"],
+                "videoId": req.videoId,
+                "title": req.title,
+                "date": req.date,
+                "chat": req.chat,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+        upsert=True,
+    )
+    return {"status": "success"}
+
+
+@app.delete("/history/{video_id}")
+@limiter.limit("20/minute")
+def delete_user_history(video_id: str, request: Request, user=Depends(get_current_user)):
+    history_collection.delete_one({"user_id": user["_id"], "videoId": video_id})
+    return {"status": "success"}
 
 
 # --------------------------------------------------------------------------
