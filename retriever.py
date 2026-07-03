@@ -18,9 +18,12 @@ logger = logging.getLogger("inquira_rag")
 HF_TOKEN = os.getenv("HF_TOKEN")
 if HF_TOKEN:
     try:
-        from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
-        _embeddings = HuggingFaceInferenceAPIEmbeddings(api_key=HF_TOKEN, model_name=config.EMBEDDING_MODEL)
-        logger.info("Using HuggingFace Cloud Inference API for zero-RAM embeddings")
+        from langchain_huggingface import HuggingFaceEndpointEmbeddings
+        _embeddings = HuggingFaceEndpointEmbeddings(
+            model=f"https://api-inference.huggingface.co/pipeline/feature-extraction/{config.EMBEDDING_MODEL}",
+            huggingfacehub_api_token=HF_TOKEN,
+        )
+        logger.info("Using HuggingFace Endpoint Embeddings for zero-RAM embeddings")
     except Exception as e:
         logger.warning(f"Falling back to local embeddings: {e}")
         _embeddings = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL)
