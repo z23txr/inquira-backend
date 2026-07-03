@@ -38,12 +38,19 @@ def load_youtube_chunks(video_id: str):
 
     fetched_transcript = None
 
+    proxy_url = os.getenv("YOUTUBE_PROXY") or os.getenv("HTTPS_PROXY")
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+    if proxy_url:
+        logger.info("Using HTTP proxy to bypass YouTube IP block")
+
     try:
         if hasattr(YouTubeTranscriptApi, "list_transcripts"):
             cookies_path = "cookies.txt" if os.path.exists("cookies.txt") else None
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_path)
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookies_path, proxies=proxies)
         else:
             session = requests.Session()
+            if proxies:
+                session.proxies.update(proxies)
             if os.path.exists("cookies.txt"):
                 try:
                     cj = http.cookiejar.MozillaCookieJar("cookies.txt")
