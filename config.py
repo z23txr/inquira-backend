@@ -49,7 +49,6 @@ LLM_MODEL = "llama-3.3-70b-versatile"
 # particular has been deprecated in the past). Check https://console.groq.com/docs/models
 POWERFUL_MODELS = [
     "llama-3.3-70b-versatile",
-    "mixtral-8x7b-32768",
     "llama-3.1-8b-instant",
     "gemma2-9b-it",
 ]
@@ -57,6 +56,5 @@ POWERFUL_MODELS = [
 FAST_MODELS = [
     "llama-3.1-8b-instant",
     "gemma2-9b-it",
-    "mixtral-8x7b-32768",
     "llama-3.3-70b-versatile",
 ]

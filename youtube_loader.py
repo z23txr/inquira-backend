@@ -27,6 +27,15 @@ def load_youtube_chunks(video_id: str):
     if not video_id or not video_id.strip():
         raise ValueError("video_id cannot be empty")
 
+    # If running on Railway/Cloud, automatically write YOUTUBE_COOKIES env var to cookies.txt
+    if not os.path.exists("cookies.txt") and os.getenv("YOUTUBE_COOKIES"):
+        try:
+            with open("cookies.txt", "w", encoding="utf-8") as f:
+                f.write(os.getenv("YOUTUBE_COOKIES"))
+            logger.info("Generated cookies.txt from YOUTUBE_COOKIES environment variable")
+        except Exception as e:
+            logger.warning(f"Could not generate cookies.txt from env: {e}")
+
     fetched_transcript = None
 
     try:
