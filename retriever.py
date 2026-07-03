@@ -1,3 +1,4 @@
+import os
 import logging
 import uuid
 from pinecone import Pinecone, ServerlessSpec
@@ -11,11 +12,21 @@ import config
 logger = logging.getLogger("inquira_rag")
 
 # --------------------------------------------------------------------------
-# Load the embedding model and Pinecone client ONCE at import time, not on
-# every /load call. HuggingFaceEmbeddings loading a transformer model from
-# disk/network on every single request would be slow and wasteful.
+# Load the embedding model and Pinecone client ONCE at import time.
+# If HF_TOKEN is set, use HuggingFace Cloud Inference API for zero RAM usage.
 # --------------------------------------------------------------------------
-_embeddings = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL)
+HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN:
+    try:
+        from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+        _embeddings = HuggingFaceInferenceAPIEmbeddings(api_key=HF_TOKEN, model_name=config.EMBEDDING_MODEL)
+        logger.info("Using HuggingFace Cloud Inference API for zero-RAM embeddings")
+    except Exception as e:
+        logger.warning(f"Falling back to local embeddings: {e}")
+        _embeddings = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL)
+else:
+    _embeddings = HuggingFaceEmbeddings(model_name=config.EMBEDDING_MODEL)
+
 _pc = Pinecone(api_key=config.PINECONE_API_KEY)
 _compressor = FlashrankRerank(model="ms-marco-TinyBERT-L-2-v2", top_n=5)
 
