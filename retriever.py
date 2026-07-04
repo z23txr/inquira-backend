@@ -11,10 +11,6 @@ import config
 
 logger = logging.getLogger("inquira_rag")
 
-# --------------------------------------------------------------------------
-# Load the embedding model and Pinecone client ONCE at import time.
-# If HF_TOKEN is set, use HuggingFace Cloud Inference API for zero RAM usage.
-# --------------------------------------------------------------------------
 HF_TOKEN = os.getenv("HF_TOKEN")
 if HF_TOKEN:
     try:
@@ -59,16 +55,6 @@ def _ensure_index_exists():
 
 
 def get_hybrid_retriever(chunks, video_id: str):
-    """
-    Builds a hybrid (BM25 + vector) retriever scoped to a single video.
-
-    CRITICAL: every video's vectors are stored under a Pinecone *namespace*
-    equal to its video_id. Without this, all videos would share one flat
-    index and a question about Video A could retrieve chunks from Video B.
-    Chunk IDs are also deterministic (derived from video_id + position), so
-    reloading the same video overwrites its old vectors instead of creating
-    duplicates.
-    """
     if not chunks:
         raise ValueError("No chunks provided to build a retriever from")
 
@@ -84,15 +70,14 @@ def get_hybrid_retriever(chunks, video_id: str):
             documents=chunks,
             embedding=_embeddings,
             index_name=config.INDEX_NAME,
-            namespace=video_id,   # isolates this video's vectors from all others
-            ids=chunk_ids,        # reloading the same video overwrites, not duplicates
+            namespace=video_id,
+            ids=chunk_ids,
         )
         logger.info(f"Embeddings stored in Pinecone under namespace '{video_id}'")
     except Exception as e:
         logger.error(f"Failed to store embeddings for video {video_id}: {e}")
         raise RuntimeError("Failed to index this video's transcript") from e
 
-    # Hybrid retriever (BM25 keyword + Pinecone vector), both scoped to this video only
     bm25_retriever = BM25Retriever.from_documents(chunks)
     bm25_retriever.k = 15
 
@@ -106,7 +91,6 @@ def get_hybrid_retriever(chunks, video_id: str):
         weights=[0.4, 0.6],
     )
 
-    # Reranking (FlashRank) using lightweight global instance
     retriever = ContextualCompressionRetriever(
         base_compressor=_compressor,
         base_retriever=hybrid_retriever,

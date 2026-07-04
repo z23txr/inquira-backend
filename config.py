@@ -19,12 +19,6 @@ MONGODB_ATLAS_URI = os.getenv("MONGODB_ATLAS_URI") or os.getenv("MONGO_URI")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "youtube_rag_db")
 MONGODB_COLLECTION_NAME = os.getenv("MONGODB_COLLECTION_NAME", "chat_history")
 
-# --------------------------------------------------------------------------
-# Fail fast: if a required key is missing, crash on startup with a clear
-# message instead of failing confusingly deep inside a request later.
-# MONGODB_ATLAS_URI is intentionally not required here — memory.py already
-# has a safe in-memory fallback if it's missing.
-# --------------------------------------------------------------------------
 _required = {
     "PINECONE_API_KEY": PINECONE_API_KEY,
     "GROQ_API_KEY": GROQ_API_KEY,
@@ -36,17 +30,12 @@ if _missing:
 if not MONGODB_ATLAS_URI:
     logger.warning("MONGODB_ATLAS_URI is not set — chat history will fall back to in-memory storage and won't persist across restarts.")
 
-# Only used by main.py's standalone CLI test harness (`python main.py`),
-# not by the API — each /load request there specifies its own video_id.
 VIDEO_ID = os.getenv("TEST_VIDEO_ID", "zCNEngO4cfY")
 
 INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "youtube-rag")
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 LLM_MODEL = "llama-3.3-70b-versatile"
 
-# NOTE: verify these model names are still active on Groq before deploying —
-# Groq periodically deprecates/renames models (mixtral-8x7b-32768 in
-# particular has been deprecated in the past). Check https://console.groq.com/docs/models
 POWERFUL_MODELS = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",

@@ -12,20 +12,12 @@ from memory import get_chat_history, format_chat_history
 
 logger = logging.getLogger("inquira_rag")
 
-# --------------------------------------------------------------------------
-# Fail fast on missing API key instead of letting Groq calls fail later
-# with a confusing error deep inside a chain.
-# --------------------------------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", getattr(config, "GROQ_API_KEY", None))
 if not GROQ_API_KEY:
     raise RuntimeError("GROQ_API_KEY environment variable must be set.")
 
 
 class ResilientGroqPool:
-    """
-    Round-Robin model rotator with instant fallback across Groq models.
-    Prevents Groq rate limit (429) errors without changing any existing logic.
-    """
     def __init__(self, models_list, temperature=0.3):
         if not models_list:
             raise ValueError("models_list cannot be empty")
@@ -37,7 +29,7 @@ class ResilientGroqPool:
                 model=m,
                 temperature=temperature,
                 max_retries=1,
-                timeout=30,          # avoid hanging requests indefinitely
+                timeout=30,
             )
             for m in models_list
         ]
@@ -57,22 +49,12 @@ class ResilientGroqPool:
         try:
             return runnable.invoke(input_data, **kwargs)
         except Exception as e:
-            # All models in the pool (primary + fallbacks) failed.
             logger.error(f"All Groq models failed: {e}")
             raise
 
 
 resilient_pool = ResilientGroqPool(getattr(config, "POWERFUL_MODELS", [config.LLM_MODEL]), temperature=0.3)
 llm = RunnableLambda(resilient_pool.invoke)
-
-# --------------------------------------------------------------------------
-# NOTE: previously this module loaded a single hardcoded video at import
-# time (`chunks = load_youtube_chunks(config.VIDEO_ID)`), and every function
-# below used that one global `retriever`. That breaks as soon as more than
-# one video/user is involved — api.py now builds a retriever per video_id
-# (see `retriever_cache` in api.py) and passes it into these functions
-# explicitly, so nothing here loads a video or holds retriever state anymore.
-# --------------------------------------------------------------------------
 
 query_rewrite_prompt = PromptTemplate(
     template="""
@@ -100,11 +82,6 @@ def compress_docs(question: str, retrieved_docs: list) -> list:
 
     all_content = "\n\n---\n\n".join(doc.page_content for doc in retrieved_docs)
 
-    # NOTE: `question` and retrieved transcript text are interpolated directly
-    # into this prompt. Since the transcript comes from a real YouTube video
-    # and the question comes from an authenticated user, the injection risk
-    # here is low, but avoid ever feeding fully untrusted/anonymous text into
-    # this same pattern without sanitizing it first.
     compression_prompt = f"""
     You are a helpful assistant that extracts relevant information.
     Question: "{question}"
@@ -119,7 +96,6 @@ def compress_docs(question: str, retrieved_docs: list) -> list:
         response = llm.invoke(compression_prompt)
     except Exception as e:
         logger.error(f"compress_docs LLM call failed: {e}")
-        # Fall back to the raw retrieved docs rather than failing the whole request.
         return retrieved_docs
 
     if "NOT RELEVANT" in response.content.upper():
@@ -187,11 +163,6 @@ grounding_prompt = PromptTemplate(
 
 
 def grounded_chain(question: str, retriever, session_id: str = "user_session_1") -> str:
-    """
-    retriever: the hybrid retriever for the specific video being asked about.
-    api.py looks this up from its per-video retriever_cache and passes it in
-    here, so this function no longer depends on any module-level state.
-    """
     if not question or not question.strip():
         raise ValueError("Question cannot be empty")
 
@@ -217,14 +188,11 @@ def grounded_chain(question: str, retriever, session_id: str = "user_session_1")
         logger.error(f"grounded_chain generation failed for session {session_id}: {e}")
         raise RuntimeError("Failed to generate an answer") from e
 
-    # Save conversation to MongoDB Atlas / Session Memory
     history.add_user_message(question)
     history.add_ai_message(result_content)
 
     return result_content
 if __name__ == "__main__":
-    # Local CLI test harness only — loads one video manually since there's
-    # no per-video cache when running this file standalone.
     from youtube_loader import load_youtube_chunks
     from retriever import get_hybrid_retriever
     logging.basicConfig(level=logging.INFO)

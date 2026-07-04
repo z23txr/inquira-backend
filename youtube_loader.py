@@ -15,19 +15,9 @@ def format_timestamp(seconds):
 
 
 def load_youtube_chunks(video_id: str):
-    """
-    Fetches a YouTube transcript and splits it into ~1000-character chunks
-    with timestamps.
-
-    Raises RuntimeError on any failure — this used to call exit(1), which
-    is fine for a standalone CLI script but is catastrophic inside a web
-    server: exit(1) kills the entire Python process (and every other
-    request being handled by that worker), not just this one request.
-    """
     if not video_id or not video_id.strip():
         raise ValueError("video_id cannot be empty")
 
-    # If running on Railway/Cloud, automatically write YOUTUBE_COOKIES env var to cookies.txt
     if not os.path.exists("cookies.txt") and os.getenv("YOUTUBE_COOKIES"):
         try:
             with open("cookies.txt", "w", encoding="utf-8") as f:
